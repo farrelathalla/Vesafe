@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  iris:
+    image: ${IRIS_IMAGE:-containers.intersystems.com/intersystems/irishealth:2026.1-em-lockeddown}
+    ports: []
+
+  backend:
+    environment:
+      MEDSENTINEL_ENV: production
+    restart: unless-stopped

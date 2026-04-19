@@ -1,0 +1,11 @@
+{
+  "serverName": "MedSimFHIR",
+  "endpointPath": "/fhir/r4",
+  "fhirVersion": "R4",
+  "strategy": "repository",
+  "strategyClass": "HS.FHIRServer.Storage.Json.InteractionsStrategy",
+  "metadataPackage": "hl7.fhir.r4.core@4.0.1",
+  "namespace": "MEDSENT",
+  "appUser": "medsent_app",
+  "walletCollection": "MedSim"
+}
