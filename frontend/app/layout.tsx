@@ -24,7 +24,10 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "VeSafe",
-  description: "AI World Model + Agent Orchestration Network for Industrial Safety (K3) Intelligence"
+  description: "AI World Model + Agent Orchestration Network for Industrial Safety (K3) Intelligence",
+  other: {
+    "dicoding:email": "farrelxag@gmail.com",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

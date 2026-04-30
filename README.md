@@ -1,13 +1,21 @@
 # VeSafe
 
-> AI World Model + Agent Orchestration Network for Industrial Safety (K3) Intelligence
+> **Spatial Command Center** untuk Pengawasan K3 dan Kepatuhan Regulasi Fasilitas Farmasi secara Otonom
 
-Built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program). VeSafe generates a navigable 3D Gaussian-splat world model from manually uploaded facility photos, then deploys six specialized K3 (Kesehatan dan Keselamatan Kerja) agent teams into that model to identify and spatially annotate critical safety risks. Findings stream in real time and are exportable as PDF and FHIR R4 DiagnosticReport artifacts, all secured through InterSystems IRIS for Health.
+Dibangun untuk **Microsoft Elevate Training Center (METC) Hackathon** — Topik: Pharma/Health.
+
+VeSafe adalah platform yang mengintegrasikan CCTV dan sensor IoT ke dalam model **3D Gaussian Splat Digital Twin** untuk pengawasan fasilitas farmasi yang otonom dan patuh terhadap regulasi BPOM CPOB 2024/2025. Platform ini mengeliminasi ketergantungan pada inspeksi manual dengan **Agentic AI** yang memantau area terbatas 24/7 — mendeteksi pelanggaran APD (masker/hairnet), pintu area steril yang terbuka melebihi toleransi, hingga deviasi parameter lingkungan (suhu, partikel) secara instan.
+
+**Tim:**
+- **Farrel Athalla Putra** — Arsitektur YOLO, integrasi Azure Web PubSub, optimasi backend pada Modal (A10G GPUs)
+- **Josephine Larissa Rachmadiana** — Penyelarasan fitur dengan regulasi farmasi (CPOB/WHO), implementasi FHIR R4, analisis risiko operasional
 
 ---
 
 ## Table of Contents
 
+- [Problem Statement](#problem-statement)
+- [Solusi: Fitur Utama](#solusi-fitur-utama)
 - [Architecture Overview](#architecture-overview)
 - [Tech Stack](#tech-stack)
 - [Repository Layout](#repository-layout)
@@ -17,8 +25,40 @@ Built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program). V
 - [Docker Deployment](#docker-deployment)
 - [Production Deployment (Azure)](#production-deployment-azure)
 - [Running Tests](#running-tests)
-- [Six K3 Safety Domains](#six-k3-safety-domains)
+- [Cara Penggunaan](#cara-penggunaan)
 - [Data Flow](#data-flow)
+- [Analisis Komparatif](#analisis-komparatif)
+- [Roadmap](#roadmap)
+
+---
+
+## Problem Statement
+
+Monitoring K3 dan kualitas di manufaktur farmasi saat ini terjebak dalam ketergantungan pada **pengawasan manual**, menyebabkan waktu deteksi laten yang tinggi. Berdasarkan standar **BPOM CPOB 2024/2025**, fasilitas sterilisasi (Grade A/B) mewajibkan pemantauan parameter lingkungan tanpa henti — namun praktik di lapangan masih sangat manual dan tidak memiliki sistem peringatan dini yang proaktif.
+
+**Risiko nyata:**
+- Deviasi suhu pukul 02:00 baru diketahui pukul 08:00 → denaturasi protein pada batch → kerugian IDR 500 juta hingga miliaran Rupiah per insiden *(WHO Technical Report Series, No. 961)*
+- Pintu airlock terbuka >30 detik → kontaminasi silang yang tidak terdeteksi
+- Staf QC harus mendokumentasikan posisi sensor secara manual (foto satu per satu) untuk prinsip ALCOA+
+
+---
+
+## Solusi: Fitur Utama
+
+### 3D Gaussian Splat Digital Twin
+Membangun replika digital fasilitas menggunakan **World Labs Marble API** untuk memvalidasi kesesuaian tata letak lab terhadap regulasi industri secara otomatis. Admin memetakan ID sensor dan kamera ke posisi aslinya di model 3D, menggantikan proses dokumentasi foto manual.
+
+### Real-Time Agentic AI (Object Detection)
+Implementasi model **YOLO** pada **Modal (A10G GPUs)** untuk mendeteksi ketidakpatuhan APD (masker/hairnet) secara instan — deteksi dalam **<5 detik** tanpa menunggu inspeksi manual. Jika ada pekerja tidak menggunakan masker atau pintu akses terbuka terlalu lama, sistem langsung memicu alert visual di peta 3D.
+
+### Spatial IoT Alert System
+Mengintegrasikan sensor lingkungan ke koordinat 3D via **InterSystems IRIS** untuk memberikan peringatan visual instan saat parameter suhu atau partikel keluar dari batas aman. Data IoT terikat permanen pada koordinat spasial 3D (Spatial Anchoring), menjamin kepatuhan mutlak terhadap prinsip **ALCOA+**.
+
+### Automated Audit Reporting (FHIR R4)
+Mengotomatisasi dokumentasi ALCOA+ — ekspor laporan standar **FHIR R4** on-demand untuk pembuktian kepatuhan operasional kepada BPOM secara instan. Menggantikan proses konsolidasi data manual yang memakan waktu 3–5 hari.
+
+### Consensus Synthesis Engine (CSE)
+Menggunakan **Azure OpenAI** untuk menganalisis data lintas domain (visual dan sensorik) guna memberikan laporan risiko yang akurat dan terkonsolidasi.
 
 ---
 
@@ -30,25 +70,24 @@ Built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program). V
 │  (Secure Wallet · FHIR R4 · RBAC · Audit Log · IntegratedML)   │
 ├──────────────┬──────────────────────────┬───────────────────────┤
 │  Layer 1     │  Layer 2                 │  Layer 3              │
-│  Manual      │  World Model Pipeline    │  Agent Orchestration  │
-│  Photo       │  Claude Vision →         │  6 K3 Domain Teams    │
-│  Upload      │  Scene Graph →           │  Modal (A10G GPUs)    │
-│  ────────    │  World Labs API →        │  Azure Web PubSub     │
-│  Drag & Drop │  .spz binary             │  CSE (Azure OpenAI)   │
-│  (16 photos) │  → Azure Blob Storage    │                       │
+│  CCTV +      │  World Model Pipeline    │  Agentic AI           │
+│  Sensor IoT  │  World Labs Marble API → │  YOLO (APD detect)    │
+│  Upload      │  Gaussian Splat 3D Twin  │  Modal (A10G GPUs)    │
+│  ────────    │  → Azure Blob Storage    │  Azure Web PubSub     │
+│  Drag & Drop │                          │  CSE (Azure OpenAI)   │
 ├──────────────┴──────────────────────────┴───────────────────────┤
-│  Layer 4: Frontend                                              │
+│  Layer 4: Frontend (Spatial Command Center)                     │
 │  Next.js 15 · React Three Fiber · Gaussian Splats              │
 │  Zustand · Azure Web PubSub · Azure Application Insights       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-The system has four clearly separated concerns:
+Empat concern yang terpisah jelas:
 
-1. **IRIS for Health** — all persistent storage, encryption (Secure Wallet AES-256), FHIR R4 repository, RBAC, and audit logging. FastAPI calls IRIS via the `intersystems-irispython` SDK.
-2. **Photo Upload + World Model Pipeline** — `backend/pipeline/` receives manually uploaded facility photos, classifies them with Claude Vision, builds a scene graph, submits to the World Labs Marble API to generate a Gaussian-splat world model, and stores the `.spz` asset in **Azure Blob Storage**.
-3. **Agent Orchestration** — `backend/agents/` runs six K3 domain teams in parallel using `asyncio.gather`. Each team calls Anthropic Claude with Indonesian K3 standard prompts against the world model data. Raw results are merged by the Consensus Synthesis Engine (CSE), which uses **Azure OpenAI** for a final cross-domain pass. Findings are persisted to IRIS and published to **Azure Web PubSub** for real-time streaming.
-4. **Frontend** — Next.js 15 App Router renders the facility list, 3D world model viewer (React Three Fiber + `@mkkellogg/gaussian-splats-3d`), live findings panel (Azure Web PubSub), and PDF/FHIR export. **Azure Application Insights** provides telemetry.
+1. **IRIS for Health** — semua persistent storage, enkripsi (Secure Wallet AES-256), FHIR R4 repository, RBAC, dan audit logging. FastAPI memanggil IRIS via SDK `intersystems-irispython`.
+2. **World Model Pipeline** — `backend/pipeline/` menerima video/foto fasilitas, mengklasifikasikannya dengan Claude Vision, membangun scene graph, dan mensubmit ke World Labs Marble API untuk menghasilkan Gaussian-splat 3D, lalu menyimpan `.spz` di **Azure Blob Storage**.
+3. **Agentic AI Monitoring** — `backend/agents/` menjalankan deteksi YOLO secara real-time untuk APD compliance dan pemantauan parameter IoT. Consensus Synthesis Engine (CSE) menggunakan **Azure OpenAI** untuk laporan risiko lintas domain. Temuan dipersistensikan ke IRIS dan dipublikasikan ke **Azure Web PubSub** untuk streaming real-time.
+4. **Frontend (Spatial Command Center)** — Next.js 15 App Router merender dashboard facility, 3D world model viewer (React Three Fiber + `@mkkellogg/gaussian-splats-3d`), live alert panel (Azure Web PubSub), dan ekspor PDF/FHIR. **Azure Application Insights** menyediakan telemetri.
 
 ---
 
@@ -68,8 +107,8 @@ The system has four clearly separated concerns:
 | `reportlab` | 4.3.1 | PDF report generation |
 | `pytest` | 8.3.5 | Test runner |
 | `intersystems-irispython` | latest | IRIS for Health SDK |
-| `anthropic` | latest | Claude Vision API for classification and agent teams |
-| `modal` | latest | Serverless GPU (A10G) hosting for agent inference |
+| `anthropic` | latest | Claude Vision API for classification |
+| `modal` | latest | Serverless GPU (A10G) hosting for YOLO inference |
 
 ### Frontend (TypeScript)
 
@@ -91,16 +130,16 @@ The system has four clearly separated concerns:
 
 | Service | Purpose |
 |---|---|
-| **InterSystems IRIS for Health** | Primary datastore, FHIR R4, encryption, RBAC |
-| **Azure OpenAI Service** | Consensus Synthesis Engine (CSE) — cross-domain finding synthesis |
+| **InterSystems IRIS for Health** | Primary datastore, FHIR R4, enkripsi, RBAC, Spatial IoT anchor |
+| **Azure OpenAI Service** | Consensus Synthesis Engine (CSE) — cross-domain risk synthesis |
 | **Azure Blob Storage** | `.spz` world model asset storage |
-| **Azure Web PubSub** | Real-time WebSocket for scan findings |
+| **Azure Web PubSub** | Real-time WebSocket untuk live alert dan incident stream |
 | **Azure App Service** | FastAPI backend hosting |
 | **Azure Static Web Apps** | Next.js frontend hosting |
-| **Azure Application Insights** | Telemetry and performance monitoring |
+| **Azure Application Insights** | Telemetri dan performance monitoring |
 | **World Labs Marble API** | Gaussian-splat 3D world model generation |
-| **Anthropic Claude** | Vision classification, six K3 agent domain teams |
-| **Modal** | Serverless A10G GPU hosting for agent inference |
+| **Anthropic Claude** | Vision classification dan scene graph |
+| **Modal** | Serverless A10G GPU hosting untuk YOLO inference real-time |
 
 ---
 
@@ -110,7 +149,7 @@ The system has four clearly separated concerns:
 vesafe/
 ├── backend/
 │   ├── api/           # FastAPI route modules
-│   ├── agents/        # Six K3 domain agent teams + consensus synthesis
+│   ├── agents/        # Agentic AI + consensus synthesis
 │   │   ├── ica_team.py        # Pencegahan Kontaminasi
 │   │   ├── msa_team.py        # Penanganan B3
 │   │   ├── fra_team.py        # Keselamatan Alat Berat
@@ -119,15 +158,15 @@ vesafe/
 │   │   ├── sca_team.py        # Komunikasi K3
 │   │   ├── consensus.py       # CSE — Azure OpenAI cross-domain synthesis
 │   │   └── orchestrator.py
-│   ├── db/            # Persistence adapters (iris_client, redis_client, azure_blob_client)
-│   ├── pipeline/      # Image acquisition → classify → scene graph → world model
-│   ├── reports/       # PDF and FHIR DiagnosticReport export
+│   ├── db/            # Persistence adapters (iris_client, azure_blob_client)
+│   ├── pipeline/      # Video/image → classify → scene graph → world model
+│   ├── reports/       # PDF dan FHIR R4 DiagnosticReport export
 │   ├── config.py      # Pydantic Settings (reads .env)
 │   ├── models.py      # Shared Pydantic data models
 │   └── main.py        # FastAPI app factory
 ├── frontend/
-│   ├── app/           # Next.js App Router pages
-│   ├── components/    # UI components
+│   ├── app/           # Next.js App Router pages (Spatial Command Center)
+│   ├── components/    # UI components (3D viewer, alert panel, dashboard)
 │   ├── hooks/         # WebSocket, model-loading hooks
 │   ├── store/         # Zustand global state
 │   └── lib/           # API client, Azure Maps, Application Insights
@@ -144,24 +183,24 @@ vesafe/
 - **Python 3.11+**
 - **Node.js 20+**
 - **Docker + Docker Compose** (required for IRIS)
-- **Azure account** with the following services provisioned (see [SETUP.md](SETUP.md)):
+- **Azure account** dengan services berikut (lihat [SETUP.md](SETUP.md)):
   - Azure OpenAI Service (gpt-4o-mini deployment)
   - Azure Blob Storage
   - Azure Web PubSub
   - Azure Application Insights
-- API keys for: World Labs, Anthropic (see [SETUP.md](SETUP.md))
+- API keys untuk: World Labs, Anthropic (lihat [SETUP.md](SETUP.md))
 
 ---
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in all values before starting.
+Copy `.env.example` ke `.env` dan isi semua nilai sebelum memulai.
 
 ```bash
 cp .env.example .env
 ```
 
-> **Synthetic fallbacks**: `MEDSENTINEL_USE_SYNTHETIC_FALLBACKS=true` skips all external API calls and returns deterministic K3 findings. Use this for local development and repeatable demos after initial real scan.
+> **Synthetic fallbacks**: `MEDSENTINEL_USE_SYNTHETIC_FALLBACKS=true` melewati semua external API call dan mengembalikan K3 findings yang deterministik. Gunakan untuk local development dan repeatable demo.
 
 ---
 
@@ -173,9 +212,9 @@ cp .env.example .env
 docker compose up iris -d
 ```
 
-Wait ~30 seconds for IRIS to initialize.
+Tunggu ~30 detik agar IRIS terinisialisasi.
 
-### 2. Set up the Python backend
+### 2. Set up Python backend
 
 ```bash
 python3 -m venv .venv
@@ -187,10 +226,10 @@ pip install -r backend/requirements.txt
 
 ```bash
 cp .env.example .env
-# Fill in API keys, or set MEDSENTINEL_USE_SYNTHETIC_FALLBACKS=true for demo mode
+# Isi API keys, atau set MEDSENTINEL_USE_SYNTHETIC_FALLBACKS=true untuk demo mode
 ```
 
-### 4. Start the backend
+### 4. Start backend
 
 ```bash
 ./scripts/start-backend.sh
@@ -198,7 +237,7 @@ cp .env.example .env
 # Docs at http://127.0.0.1:8000/docs
 ```
 
-### 5. Start the frontend
+### 5. Start frontend
 
 ```bash
 cd frontend
@@ -217,7 +256,7 @@ docker compose logs -f backend
 docker compose down
 ```
 
-> **Security:** IRIS ports `1972` and `52773` are on the `internal` network only.
+> **Security:** IRIS ports `1972` dan `52773` hanya ada di network `internal`.
 
 ---
 
@@ -226,15 +265,10 @@ docker compose down
 ### Backend — Azure App Service
 
 ```bash
-# Build Docker image
 docker build -t vesafe-backend ./backend
-
-# Push to Azure Container Registry
 az acr login --name <your-acr>
 docker tag vesafe-backend <your-acr>.azurecr.io/vesafe-backend:latest
 docker push <your-acr>.azurecr.io/vesafe-backend:latest
-
-# Deploy to App Service
 az webapp create --resource-group vesafe-rg --plan vesafe-plan \
   --name vesafe-api --deployment-container-image-name \
   <your-acr>.azurecr.io/vesafe-backend:latest
@@ -260,35 +294,24 @@ pytest tests/backend/test_consensus.py -v
 pytest --cov=backend
 ```
 
-Tests use in-memory IRIS/Azure stubs and do not require external API keys.
+Tests menggunakan in-memory IRIS/Azure stubs dan tidak memerlukan external API keys.
 
 ---
 
-## Six K3 Safety Domains
+## Cara Penggunaan
 
-Each agent team ingests the facility's world model data and produces spatially anchored `Finding` records ranked by severity.
-
-| Team | Module | Domain | Indonesian Standard |
-|---|---|---|---|
-| **ICA** | `agents/ica_team.py` | Pencegahan Kontaminasi | CPOB BPOM RI |
-| **MSA** | `agents/msa_team.py` | Penanganan B3 | PP No. 74/2001, Permenaker 187/MEN/1999 |
-| **FRA** | `agents/fra_team.py` | Keselamatan Alat Berat | SMK3 PP No. 50/2012, SNI |
-| **ERA** | `agents/era_team.py` | Tanggap Darurat | Permenaker No. 04/MEN/1980 |
-| **PFA** | `agents/pfa_team.py` | Alur Produksi | CPOB Bab 3 — Bangunan dan Fasilitas |
-| **SCA** | `agents/sca_team.py` | Komunikasi K3 | SMK3 + ISO 45001:2018 |
-
-All six run concurrently via `asyncio.gather` in `agents/orchestrator.py`. The **Consensus Synthesis Engine** (`agents/consensus.py`) deduplicates overlapping findings and re-ranks the final list using **Azure OpenAI**.
+1. **Digital Site Audit** — User mengunggah video internal lab; sistem membangun model 3D Gaussian Splat dan melakukan pengecekan otomatis terhadap standar penempatan ruang sesuai regulasi.
+2. **Virtual Sensor Tagging** — Admin memetakan ID sensor dan kamera ke posisi aslinya di model 3D, menggantikan proses dokumentasi foto manual (memenuhi prinsip ALCOA+).
+3. **Active Monitoring** — AI memantau live feed secara background 24/7. Jika ada pekerja tidak menggunakan masker/hairnet atau pintu akses terbuka melebihi batas waktu toleransi, sistem langsung memicu alert visual di peta 3D dalam <5 detik.
+4. **Instant Incident Review** — Supervisor menerima notifikasi real-time di dashboard dan dapat langsung meninjau rekaman di lokasi kejadian melalui koordinat 3D.
+5. **Compliance Export** — User mengekspor laporan standar **FHIR R4** untuk pembuktian kepatuhan operasional kepada BPOM secara instan.
 
 ---
 
 ## Data Flow
 
 ```
-Safety officer registers facility (name + address)
-    ↓
-POST /api/facilities  →  facility record created in IRIS
-    ↓
-Safety officer uploads ~16 interior photos (drag & drop)
+Safety officer mengunggah video/foto fasilitas
     ↓
 pipeline/classify.py  →  Claude Vision: tag area types, K3 hazard signals
     ↓
@@ -296,15 +319,36 @@ pipeline/scene_graph.py  →  structured scene graph JSON
     ↓
 pipeline/world_model.py  →  World Labs Marble API  →  .spz → Azure Blob Storage
     ↓
-POST /api/scans  →  agents/orchestrator.py
+Spatial Command Center: model 3D ditampilkan di frontend
     ↓
-asyncio.gather(ica, msa, fra, era, pfa, sca)  [Modal A10G GPUs]
+Admin: Virtual Sensor Tagging — petakan ID sensor/kamera ke koordinat 3D
     ↓
-agents/consensus.py  →  CSE synthesis (Azure OpenAI cross-domain pass)
+Active Monitoring: YOLO (Modal A10G) + IoT sensor stream
     ↓
-iris_client.write_findings()  →  IRIS Secure Wallet storage
+Anomali terdeteksi → agents/consensus.py (CSE — Azure OpenAI)
     ↓
-azure_pubsub_client.publish()  →  Azure Web PubSub → browser live findings panel
+iris_client.write_findings()  →  IRIS Secure Wallet (FHIR R4, ALCOA+)
     ↓
-/api/reports  →  PDF (ReportLab) or FHIR DiagnosticReport (IRIS FHIR R4)
+azure_pubsub_client.publish()  →  Azure Web PubSub → live alert panel (dashboard)
+    ↓
+/api/reports  →  PDF (ReportLab) atau FHIR R4 DiagnosticReport (on-demand)
 ```
+
+---
+
+## Analisis Komparatif
+
+| Parameter Evaluasi | Status Quo (Manual) | VeSafe (Spatial Intelligence) | Dampak Bisnis |
+|---|---|---|---|
+| **Response Latency** | Reaktif; bergantung jadwal inspeksi fisik | Proaktif; deteksi instan <5 detik | Mencegah kerusakan molekuler pada batch sensitif |
+| **Data Veracity** | Foto manual, rawan manipulasi & kehilangan metadata | Spatial Anchoring — data IoT terikat ke koordinat 3D | Menjamin kepatuhan ALCOA+ |
+| **Compliance Audit** | 3–5 hari konsolidasi data manual | On-demand — ekspor FHIR R4 otomatis | Audit-readiness 24/7, hemat biaya administratif |
+| **Asset Validation** | Verifikasi tata letak berkala/manual | Validasi otomatis via Digital Twin vs. regulasi | Desain fasilitas selalu sesuai standar GxP |
+
+---
+
+## Roadmap
+
+- **Predictive Risk Scoring** — Integrasi Azure OpenAI untuk memprediksi potensi kebocoran suhu atau kegagalan alat berdasarkan pola historis data sensor *sebelum* anomali terjadi.
+- **Digital Audit Passthrough** — Portal bagi auditor eksternal (BPOM/WHO) untuk melakukan inspeksi fasilitas secara virtual melalui 3D model, mengurangi kebutuhan kunjungan fisik dan mempercepat sertifikasi.
+- **Dynamic Evacuation Routing** — Integrasi jalur evakuasi darurat yang dipandu AI berdasarkan lokasi ancaman (misal: kebocoran gas kimia) yang terdeteksi secara spasial.
