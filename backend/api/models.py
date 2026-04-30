@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import boto3
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -30,6 +31,24 @@ async def get_status(unit_id: str):
     }
 
 
+def _make_s3_client(settings):
+    return boto3.client(
+        "s3",
+        endpoint_url=f"https://{settings.r2_account_id}.r2.cloudflarestorage.com",
+        aws_access_key_id=settings.r2_access_key_id,
+        aws_secret_access_key=settings.r2_secret_access_key,
+        region_name="auto",
+    )
+
+
+def _key_exists(s3, bucket: str, key: str) -> bool:
+    try:
+        s3.head_object(Bucket=bucket, Key=key)
+        return True
+    except ClientError:
+        return False
+
+
 @router.get("/{unit_id}/splat")
 async def get_splat(unit_id: str):
     settings = get_settings()
@@ -40,7 +59,9 @@ async def get_splat(unit_id: str):
         raise HTTPException(status_code=404, detail="No splat asset available")
     if not model.splat_r2_key:
         raise HTTPException(status_code=404, detail="Model asset not found")
-    # Return both the public R2 URL and a CORS-safe proxy URL
+    s3 = _make_s3_client(settings)
+    if not _key_exists(s3, settings.r2_bucket_name, model.splat_r2_key):
+        raise HTTPException(status_code=404, detail="Splat asset not in R2 — upload the .spz file first")
     public_url = f"{settings.r2_public_url}/{model.splat_r2_key}"
     return {
         "unit_id": unit_id,
@@ -66,17 +87,14 @@ async def stream_splat(unit_id: str):
     if settings.use_synthetic_fallbacks or not settings.r2_account_id:
         raise HTTPException(status_code=404, detail="R2 not configured — no splat asset available")
 
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=f"https://{settings.r2_account_id}.r2.cloudflarestorage.com",
-        aws_access_key_id=settings.r2_access_key_id,
-        aws_secret_access_key=settings.r2_secret_access_key,
-        region_name="auto",
-    )
+    s3 = _make_s3_client(settings)
 
     try:
         obj = s3.get_object(Bucket=settings.r2_bucket_name, Key=model.splat_r2_key)
-    except Exception as exc:
+    except ClientError as exc:
+        code = exc.response["Error"]["Code"]
+        if code in ("NoSuchKey", "404"):
+            raise HTTPException(status_code=404, detail="Splat asset not found in R2") from exc
         raise HTTPException(status_code=502, detail=f"R2 fetch failed: {exc}") from exc
 
     content_type = obj.get("ContentType", "application/octet-stream")

@@ -2,7 +2,7 @@
 
 > AI World Model + Agent Orchestration Network for Industrial Safety (K3) Intelligence
 
-Built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program). VeSafe automatically acquires public imagery of any pharmaceutical manufacturing facility, generates a navigable 3D Gaussian-splat world model, then deploys six specialized K3 (Kesehatan dan Keselamatan Kerja) agent teams into that model to identify and spatially annotate critical safety risks. Findings stream in real time and are exportable as PDF and FHIR R4 DiagnosticReport artifacts, all secured through InterSystems IRIS for Health.
+Built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program). VeSafe generates a navigable 3D Gaussian-splat world model from manually uploaded facility photos, then deploys six specialized K3 (Kesehatan dan Keselamatan Kerja) agent teams into that model to identify and spatially annotate critical safety risks. Findings stream in real time and are exportable as PDF and FHIR R4 DiagnosticReport artifacts, all secured through InterSystems IRIS for Health.
 
 ---
 
@@ -30,15 +30,15 @@ Built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program). V
 │  (Secure Wallet · FHIR R4 · RBAC · Audit Log · IntegratedML)   │
 ├──────────────┬──────────────────────────┬───────────────────────┤
 │  Layer 1     │  Layer 2                 │  Layer 3              │
-│  Image       │  World Model Pipeline    │  Agent Orchestration  │
-│  Acquisition │  Claude Vision →         │  6 K3 Domain Teams    │
-│  ────────    │  Scene Graph →           │  Modal (A10G GPUs)    │
-│  Street View │  World Labs API →        │  Azure Web PubSub     │
-│  Places API  │  .spz binary             │  CSE (Azure OpenAI)   │
-│  OSM         │  → Azure Blob Storage    │                       │
+│  Manual      │  World Model Pipeline    │  Agent Orchestration  │
+│  Photo       │  Claude Vision →         │  6 K3 Domain Teams    │
+│  Upload      │  Scene Graph →           │  Modal (A10G GPUs)    │
+│  ────────    │  World Labs API →        │  Azure Web PubSub     │
+│  Drag & Drop │  .spz binary             │  CSE (Azure OpenAI)   │
+│  (16 photos) │  → Azure Blob Storage    │                       │
 ├──────────────┴──────────────────────────┴───────────────────────┤
 │  Layer 4: Frontend                                              │
-│  Next.js 15 · Azure Maps · React Three Fiber · Gaussian Splats │
+│  Next.js 15 · React Three Fiber · Gaussian Splats              │
 │  Zustand · Azure Web PubSub · Azure Application Insights       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -46,9 +46,9 @@ Built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program). V
 The system has four clearly separated concerns:
 
 1. **IRIS for Health** — all persistent storage, encryption (Secure Wallet AES-256), FHIR R4 repository, RBAC, and audit logging. FastAPI calls IRIS via the `intersystems-irispython` SDK.
-2. **Image Acquisition + World Model Pipeline** — `backend/pipeline/` pulls imagery from Google Street View / Places, classifies it with Claude Vision, builds a scene graph, submits to the World Labs Marble API to generate a Gaussian-splat world model, and stores the `.spz` asset in **Azure Blob Storage**.
+2. **Photo Upload + World Model Pipeline** — `backend/pipeline/` receives manually uploaded facility photos, classifies them with Claude Vision, builds a scene graph, submits to the World Labs Marble API to generate a Gaussian-splat world model, and stores the `.spz` asset in **Azure Blob Storage**.
 3. **Agent Orchestration** — `backend/agents/` runs six K3 domain teams in parallel using `asyncio.gather`. Each team calls Anthropic Claude with Indonesian K3 standard prompts against the world model data. Raw results are merged by the Consensus Synthesis Engine (CSE), which uses **Azure OpenAI** for a final cross-domain pass. Findings are persisted to IRIS and published to **Azure Web PubSub** for real-time streaming.
-4. **Frontend** — Next.js 15 App Router renders the facility map (**Azure Maps**), 3D world model viewer (React Three Fiber + `@mkkellogg/gaussian-splats-3d`), live findings panel (Azure Web PubSub), and PDF/FHIR export. **Azure Application Insights** provides telemetry.
+4. **Frontend** — Next.js 15 App Router renders the facility list, 3D world model viewer (React Three Fiber + `@mkkellogg/gaussian-splats-3d`), live findings panel (Azure Web PubSub), and PDF/FHIR export. **Azure Application Insights** provides telemetry.
 
 ---
 
@@ -81,7 +81,6 @@ The system has four clearly separated concerns:
 | `@react-three/drei` | 10.0.4 | Three.js helpers |
 | `@mkkellogg/gaussian-splats-3d` | 0.4.7 | Gaussian splat renderer |
 | `three` | 0.174.0 | Underlying 3D engine |
-| `azure-maps-control` | v3 | Facility selection map |
 | `@microsoft/applicationinsights-web` | latest | Azure Application Insights telemetry |
 | `zustand` | 5.0.3 | Global viewer and interaction state |
 | `recharts` | 2.15.1 | Risk score and coverage charts |
@@ -95,12 +94,10 @@ The system has four clearly separated concerns:
 | **InterSystems IRIS for Health** | Primary datastore, FHIR R4, encryption, RBAC |
 | **Azure OpenAI Service** | Consensus Synthesis Engine (CSE) — cross-domain finding synthesis |
 | **Azure Blob Storage** | `.spz` world model asset storage |
-| **Azure Maps** | Facility map tiles and geocoding |
 | **Azure Web PubSub** | Real-time WebSocket for scan findings |
 | **Azure App Service** | FastAPI backend hosting |
 | **Azure Static Web Apps** | Next.js frontend hosting |
 | **Azure Application Insights** | Telemetry and performance monitoring |
-| **Google Street View / Places API** | Public imagery acquisition |
 | **World Labs Marble API** | Gaussian-splat 3D world model generation |
 | **Anthropic Claude** | Vision classification, six K3 agent domain teams |
 | **Modal** | Serverless A10G GPU hosting for agent inference |
@@ -150,10 +147,9 @@ vesafe/
 - **Azure account** with the following services provisioned (see [SETUP.md](SETUP.md)):
   - Azure OpenAI Service (gpt-4o-mini deployment)
   - Azure Blob Storage
-  - Azure Maps
   - Azure Web PubSub
   - Azure Application Insights
-- API keys for: Google Maps Platform, World Labs, Anthropic (see [SETUP.md](SETUP.md))
+- API keys for: World Labs, Anthropic (see [SETUP.md](SETUP.md))
 
 ---
 
@@ -288,11 +284,11 @@ All six run concurrently via `asyncio.gather` in `agents/orchestrator.py`. The *
 ## Data Flow
 
 ```
-User selects facility on Azure Maps
+Safety officer registers facility (name + address)
     ↓
-POST /api/facilities  →  Google Geocoding + Places lookup
+POST /api/facilities  →  facility record created in IRIS
     ↓
-pipeline/image_acquisition.py  →  Street View + Places Photos
+Safety officer uploads ~16 interior photos (drag & drop)
     ↓
 pipeline/classify.py  →  Claude Vision: tag area types, K3 hazard signals
     ↓

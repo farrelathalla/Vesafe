@@ -128,18 +128,19 @@ def _response_error_detail(response: httpx.Response) -> str:
     return str(payload)[:1000]
 
 
-async def _poll_world_completion(client: httpx.AsyncClient, operation_id: str, api_key: str, api_base: str) -> dict:
-    deadline = datetime.now(tz=UTC) + timedelta(minutes=6)
-    while datetime.now(tz=UTC) < deadline:
-        response = await client.get(
-            f"{api_base}/marble/v1/operations/{operation_id}",
-            headers={"WLT-Api-Key": api_key},
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if payload.get("done"):
-            return payload
-        await asyncio.sleep(3)
+async def _poll_world_completion(operation_id: str, api_key: str, api_base: str) -> dict:
+    deadline = datetime.now(tz=UTC) + timedelta(minutes=30)
+    async with httpx.AsyncClient(timeout=30) as poll_client:
+        while datetime.now(tz=UTC) < deadline:
+            response = await poll_client.get(
+                f"{api_base}/marble/v1/operations/{operation_id}",
+                headers={"WLT-Api-Key": api_key},
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("done"):
+                return payload
+            await asyncio.sleep(5)
     raise RuntimeError("Timed out waiting for World Labs world generation")
 
 
@@ -186,7 +187,7 @@ async def generate_world_model(images: list[dict], scene_graph: dict, *, facilit
         "display_name": f"{facility_name} world model",
         "world_prompt": _world_prompt_from_images(images, scene_graph),
     }
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=60) as client:
         start = await client.post(
             f"{api_base}/marble/v1/worlds:generate",
             headers={
@@ -212,15 +213,18 @@ async def generate_world_model(images: list[dict], scene_graph: dict, *, facilit
         start.raise_for_status()
         operation = start.json()
         operation_id = operation["operation_id"]
-        completed = await _poll_world_completion(client, operation_id, settings.world_labs_api_key, api_base)
-        if completed.get("error"):
-            message = completed["error"].get("message", "World Labs generation failed")
-            raise RuntimeError(message)
 
-        world = completed.get("response") or {}
-        world_id = world.get("world_id") or operation_id
-        spz_url, caption, thumbnail_url = _extract_spz_url(world)
-        asset_response = await client.get(spz_url)
+    completed = await _poll_world_completion(operation_id, settings.world_labs_api_key, api_base)
+    if completed.get("error"):
+        message = completed["error"].get("message", "World Labs generation failed")
+        raise RuntimeError(message)
+
+    world = completed.get("response") or {}
+    world_id = world.get("world_id") or operation_id
+    spz_url, caption, thumbnail_url = _extract_spz_url(world)
+
+    async with httpx.AsyncClient(timeout=300) as dl_client:
+        asset_response = await dl_client.get(spz_url)
         asset_response.raise_for_status()
 
     extension = _asset_extension(spz_url, asset_response.headers.get("content-type"))

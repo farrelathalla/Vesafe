@@ -23,11 +23,15 @@ async function parse<T>(path: string, init?: RequestInit): Promise<T> {
         "Content-Type": "application/json",
         ...(init?.headers ?? {})
       },
-      cache: "no-store"
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
     });
   } catch (error) {
+    const isTimeout = error instanceof Error && error.name === "TimeoutError";
     throw new Error(
-      `Unable to reach VeSafe backend at ${API_BASE}. Start the FastAPI server with \`./scripts/start-backend.sh\` from the repo root and retry.`,
+      isTimeout
+        ? `VeSafe backend at ${API_BASE} did not respond within 8 s. Is the FastAPI server running?`
+        : `Unable to reach VeSafe backend at ${API_BASE}. Start it with: .venv/Scripts/python -m uvicorn backend.main:app --reload`,
       { cause: error }
     );
   }

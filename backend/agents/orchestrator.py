@@ -40,11 +40,29 @@ def _utcnow() -> datetime:
 def _get_provider():
     from backend.config import get_settings
     settings = get_settings()
-    if settings.use_synthetic_fallbacks or not settings.openai_api_key:
+
+    if settings.use_synthetic_fallbacks:
         from backend.agents.providers.synthetic import SyntheticProvider
         return SyntheticProvider()
-    from backend.agents.providers.openai_provider import OpenAIProvider
-    return OpenAIProvider(model="gpt-4o-mini")
+
+    def _real(val: str) -> bool:
+        return bool(val) and not val.startswith("<")
+
+    if _real(settings.azure_openai_api_key) and _real(settings.azure_openai_endpoint) and _real(settings.azure_openai_deployment):
+        from backend.agents.providers.azure_openai_provider import AzureOpenAIProvider
+        return AzureOpenAIProvider()
+
+    if _real(settings.anthropic_api_key):
+        from backend.agents.providers.anthropic_provider import AnthropicProvider
+        return AnthropicProvider()
+
+    openai_key = _real(settings.openai_api_key)
+    if openai_key:
+        from backend.agents.providers.openai_provider import OpenAIProvider
+        return OpenAIProvider(model="gpt-4o-mini")
+
+    from backend.agents.providers.synthetic import SyntheticProvider
+    return SyntheticProvider()
 
 
 async def _pub(unit_id: str, payload: dict) -> None:

@@ -3,7 +3,7 @@
 VeSafe is organized into four legible layers:
 
 1. `frontend/`
-   Next.js 15 App Router UI for facility onboarding, coverage review, world model viewing, and report export. Uses Azure Maps for facility selection and Azure Application Insights for telemetry.
+   Next.js 15 App Router UI for facility onboarding, manual photo upload, world model viewing, and report export. Uses Azure Application Insights for telemetry.
 2. `backend/`
    FastAPI APIs, world-model pipeline stages, six K3 domain agent teams, consensus synthesis (Azure OpenAI), and export generation.
 3. `iris/`
@@ -18,7 +18,7 @@ VeSafe is organized into four legible layers:
 - `backend/db/`
   Persistence adapters. `iris_client.py`, `redis_client.py`, and `azure_blob_client.py` define swap-friendly seams.
 - `backend/pipeline/`
-  Image acquisition, classification, scene-graph extraction, and world-model generation.
+  Image classification, scene-graph extraction, and world-model generation from manually uploaded photos.
 - `backend/agents/`
   Six K3 domain teams, prompts, consensus synthesis, and scan orchestration.
 - `backend/agents/providers/`
@@ -28,7 +28,7 @@ VeSafe is organized into four legible layers:
 - `frontend/components/`
   Route-independent UI building blocks grouped by viewer, findings, facility, and shared UI.
 - `frontend/lib/`
-  API client, Azure Maps initialization, Azure Application Insights setup.
+  API client, Azure Application Insights setup.
 
 ## Azure Integration
 
@@ -37,7 +37,6 @@ VeSafe is organized into four legible layers:
 | LLM (CSE) | Azure OpenAI | `agents/providers/azure_openai_provider.py` |
 | Asset storage | Azure Blob Storage | `db/azure_blob_client.py` |
 | Real-time stream | Azure Web PubSub | `db/redis_client.py` (adapter) |
-| Map tiles | Azure Maps | `frontend/lib/azureMaps.ts` |
 | Telemetry | Azure Application Insights | `frontend/lib/insights.ts` |
 | Backend hosting | Azure App Service | docker-compose.prod.yml |
 | Frontend hosting | Azure Static Web Apps | GitHub Actions CI/CD |

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import mimetypes
+import pathlib
 
 import boto3
 from botocore.client import BaseClient
 
 from backend.config import get_settings
+
+LOCAL_UPLOAD_DIR = pathlib.Path("uploads")
 
 
 class R2Client:
@@ -33,7 +36,10 @@ class R2Client:
 
     def upload_bytes(self, key: str, payload: bytes, *, content_type: str | None = None) -> str:
         if not self.enabled:
-            raise RuntimeError("R2 is not configured")
+            dest = LOCAL_UPLOAD_DIR / key
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(payload)
+            return key
         guessed = content_type or mimetypes.guess_type(key)[0] or "application/octet-stream"
         self._get_client().put_object(
             Bucket=get_settings().r2_bucket_name,
@@ -44,6 +50,8 @@ class R2Client:
         return key
 
     def public_url_for(self, key: str) -> str:
+        if not self.enabled:
+            return f"/api/uploads/{key}"
         return f"{get_settings().r2_public_url.rstrip('/')}/{key.lstrip('/')}"
 
 

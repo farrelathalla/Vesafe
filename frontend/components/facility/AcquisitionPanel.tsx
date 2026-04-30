@@ -65,10 +65,10 @@ export function AcquisitionPanel({
   return (
     <div className="panel" style={{ display: "grid", gap: 14 }}>
       <div>
-        <div className="eyebrow">Phase 1 Acquisition</div>
-        <h2 style={{ margin: "8px 0 10px" }}>Public imagery to world model</h2>
+        <div className="eyebrow">Proses World Model</div>
+        <h2 style={{ margin: "8px 0 10px" }}>Foto ke world model 3D</h2>
         <p className="muted" style={{ marginBottom: 0 }}>
-          Fetch Google Street View, Places photos, and OSM context, then generate a world model for this unit.
+          Proses foto yang diunggah dan bangun world model 3D untuk unit ini.
         </p>
       </div>
       <div className="cta-row">

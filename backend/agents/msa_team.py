@@ -1,39 +1,53 @@
-"""Penanganan B3 — penyimpanan bahan berbahaya, MSDS/SDS, ventilasi area kimia."""
+"""MSA — Material Safety Audit: APD, penanganan B3, emergency shower."""
 from __future__ import annotations
 
 from backend.agents.team_utils import accessible_equipment, has_equipment, make_finding, rooms_from_model
+
+_PPE_REQUIRED = {"production_zone", "hazmat_storage", "chemical_storage", "gowning_room", "loading_dock"}
 
 
 async def run(scan_id: str, world_model: dict) -> list[dict]:
     findings: list[dict] = []
     for room in rooms_from_model(world_model):
-        if room.get("type") not in {"chemical_storage_area", "quality_control_lab", "production_floor"}:
-            continue
+        zone_type = room.get("type", "")
+        tags = room.get("zone_tags", [])
+        needs_ppe = zone_type in _PPE_REQUIRED or "hazmat_zone" in tags or "ppe_required" in tags
+        is_hazmat = room.get("hazmat_present") or "hazmat_zone" in tags
 
-        if not has_equipment(room, "safety_cabinet"):
-            findings.append(make_finding(
-                scan_id=scan_id, domain="MSA", sub_agent="B3-Storage-Auditor", room=room,
-                severity="HIGH", confidence=0.89,
-                label_text=f"Tidak ada lemari penyimpanan B3 di {room['room_id']}",
-                recommendation="Pasang safety cabinet B3 per PP No. 74/2001 dan Permenaker No. 187/MEN/1999",
-                eq_type="safety_cabinet",
-            ))
-        elif not accessible_equipment(room, "safety_cabinet"):
-            findings.append(make_finding(
-                scan_id=scan_id, domain="MSA", sub_agent="B3-Storage-Auditor", room=room,
-                severity="HIGH", confidence=0.86,
-                label_text=f"Lemari B3 di {room['room_id']} terhalang atau tidak berlabel GHS",
-                recommendation="Bersihkan akses dan lengkapi label GHS/SDS per Permenaker No. 187/MEN/1999",
-                eq_type="safety_cabinet",
-            ))
+        if needs_ppe:
+            if not has_equipment(room, "ppe_station"):
+                findings.append(make_finding(
+                    scan_id=scan_id, domain="MSA", sub_agent="PPE-Station-Auditor", room=room,
+                    severity="CRITICAL", confidence=0.92,
+                    label_text=f"Tidak ada stasiun APD di zona wajib APD {room['room_id']}",
+                    recommendation="Pasang stasiun APD lengkap (helm, sarung tangan, goggle, apron) di akses zona per SMK3",
+                    eq_type="ppe_station",
+                ))
+            elif not accessible_equipment(room, "ppe_station"):
+                findings.append(make_finding(
+                    scan_id=scan_id, domain="MSA", sub_agent="PPE-Station-Auditor", room=room,
+                    severity="HIGH", confidence=0.86,
+                    label_text=f"Stasiun APD di {room['room_id']} terhalang atau kosong",
+                    recommendation="Bersihkan akses stasiun APD dan isi ulang perlengkapan yang habis",
+                    eq_type="ppe_station",
+                ))
 
-        if not has_equipment(room, "workstation"):
-            findings.append(make_finding(
-                scan_id=scan_id, domain="MSA", sub_agent="MSDS-Compliance-Checker", room=room,
-                severity="ADVISORY", confidence=0.74,
-                label_text=f"Tidak ada stasiun MSDS/SDS di {room['room_id']} — informasi B3 tidak accessible",
-                recommendation="Sediakan akses MSDS/SDS fisik atau digital di setiap area kerja B3 per PP 74/2001",
-                eq_type="workstation",
-            ))
+        if is_hazmat:
+            if not has_equipment(room, "emergency_shower"):
+                findings.append(make_finding(
+                    scan_id=scan_id, domain="MSA", sub_agent="Emergency-Shower-Auditor", room=room,
+                    severity="CRITICAL", confidence=0.94,
+                    label_text=f"Tidak ada emergency shower di area B3 {room['room_id']} — risiko cedera kimia akut",
+                    recommendation="Pasang emergency shower + eyewash dalam radius 10 detik jalan per ANSI Z358.1",
+                    eq_type="emergency_shower",
+                ))
+            elif not accessible_equipment(room, "emergency_shower"):
+                findings.append(make_finding(
+                    scan_id=scan_id, domain="MSA", sub_agent="Emergency-Shower-Auditor", room=room,
+                    severity="CRITICAL", confidence=0.90,
+                    label_text=f"Emergency shower di {room['room_id']} terhalang — tidak dapat digunakan saat paparan kimia",
+                    recommendation="Bersihkan jalur akses emergency shower, area bebas halangan min 1m per ANSI Z358.1",
+                    eq_type="emergency_shower",
+                ))
 
     return findings

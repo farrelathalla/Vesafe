@@ -1,41 +1,42 @@
 """
-Canonical Spatial Bundle
-========================
-Derives a structured, LLM-readable spatial bundle from a raw scene-graph JSON.
-This is the *sole* input contract for all domain swarm agents and scenario swarms.
+Canonical Spatial Bundle — Pharmaceutical Warehouse K3
+=======================================================
+Derives a structured, LLM-readable spatial bundle from a warehouse scene-graph.
+This is the sole input contract for all K3 domain swarm agents.
 
-LLMs must emit room_id / equipment_ref references, never raw coordinates.
-The grounding layer (backend.agents.grounding) snaps those references to anchors
-stored here.
+LLMs emit zone_id / equipment_ref references only — no raw coordinates.
 """
 from __future__ import annotations
 
 import math
 
-_GRID_SCALE = 3.5
-_COL_ORIGIN = 0.86
+_GRID_SCALE = 4.0
+_COL_ORIGIN = 0.5
 _ROW_ORIGIN = 0.5
-_HALF = _GRID_SCALE * 0.35
+_HALF = _GRID_SCALE * 0.4
 
-# Heights for model a97601cc (ground_plane_offset=1.467, metric_scale=0.913)
-# Y = 1.467 - real_height_m / 0.913
 _EQ_HEIGHT: dict[str, float] = {
-    "hand_hygiene_dispenser": 0.15,
-    "crash_cart":             0.48,
-    "monitor":               -0.51,
-    "ventilator":             0.26,
-    "iv_pole":               -0.07,
-    "call_light":             0.54,
-    "workstation":            0.37,
-    "adc":                    0.21,
-    "defibrillator":          0.37,
+    "fire_extinguisher":    1.2,
+    "ppe_station":          1.5,
+    "emergency_shower":     2.1,
+    "spill_kit":            0.9,
+    "chemical_rack":        1.8,
+    "secondary_containment":0.1,
+    "safety_mirror":        2.0,
+    "electrical_panel":     1.4,
+    "emergency_exit":       2.2,
+    "evacuation_sign":      2.3,
+    "dock_safety_light":    2.5,
+    "wheel_chock":          0.1,
+    "charging_station":     1.0,
+    "air_shower":           2.0,
 }
-_DEFAULT_HEIGHT = 0.37
+_DEFAULT_HEIGHT = 1.0
 
 
-def _grid_center(room: dict) -> dict[str, float]:
-    col = float(room.get("grid_col", 0))
-    row = float(room.get("grid_row", 0))
+def _grid_center(room: dict, index: int) -> dict[str, float]:
+    col = float(index % 4)
+    row = float(index // 4)
     return {
         "x": round((col - _COL_ORIGIN) * _GRID_SCALE, 3),
         "y": _DEFAULT_HEIGHT,
@@ -50,75 +51,66 @@ def _parse_position_offset(pos: str) -> tuple[float, float, float]:
         dx += _HALF
     if "left" in p:
         dx -= _HALF
-    if any(w in p for w in ("door", "entry")):
+    if "entry" in p or "door" in p:
         dz -= _HALF
-    if any(w in p for w in ("back wall", "far end", "back")):
+    if "back" in p or "far" in p:
         dz += _HALF
-    if any(w in p for w in ("bedside", "head of")):
-        dz += _HALF * 0.5
-    if any(w in p for w in ("ceiling", "overhead", "ceiling arm", "ceiling boom")):
+    if "ceiling" in p or "overhead" in p:
         dy = 2.3 - _DEFAULT_HEIGHT
-    elif any(w in p for w in ("wall mount", "wall")):
-        dy = 1.35 - _DEFAULT_HEIGHT
-    elif any(w in p for w in ("floor", "ground")):
-        dy = 0.15 - _DEFAULT_HEIGHT
+    elif "wall" in p:
+        dy = 1.4 - _DEFAULT_HEIGHT
+    elif "floor" in p or "ground" in p:
+        dy = 0.1 - _DEFAULT_HEIGHT
     return dx, dy, dz
 
 
-def _eq_anchor(room: dict, eq: dict) -> dict[str, float]:
-    center = _grid_center(room)
+def _eq_anchor(room_center: dict, eq: dict) -> dict[str, float]:
     eq_type = eq.get("type", "")
     height = _EQ_HEIGHT.get(eq_type, _DEFAULT_HEIGHT)
     dx, dy, dz = _parse_position_offset(eq.get("position", ""))
     return {
-        "x": round(center["x"] + dx, 3),
+        "x": round(room_center["x"] + dx, 3),
         "y": round(height + dy, 3),
-        "z": round(center["z"] + dz, 3),
+        "z": round(room_center["z"] + dz, 3),
     }
 
 
 def _zone_tags(room: dict, flow_annotations: dict) -> list[str]:
     tags: list[str] = []
-    room_id = room.get("room_id", "")
     room_type = (room.get("type") or "").lower()
+    room_id = room.get("room_id", "")
 
-    if room_id in flow_annotations.get("clean_corridors", []):
-        tags.append("clean_corridor")
-    if room_id in flow_annotations.get("dirty_corridors", []):
-        tags.append("dirty_corridor")
-    if any(k in room_type for k in ("patient", "icu", "sim", "bay", "resus")):
-        tags.append("patient_care")
-    if any(k in room_type for k in ("medication", "pharmacy")):
-        tags.append("medication")
-    if "nursing_station" in room_type:
-        tags.append("nursing_hub")
-    if any(k in room_type for k in ("corridor", "hall")):
+    if room_id in flow_annotations.get("hazmat_zones", []):
+        tags.append("hazmat_zone")
+    if room.get("hazmat_present"):
+        tags.append("hazmat_zone")
+    if room.get("forklift_access"):
+        tags.append("forklift_zone")
+    if room.get("has_emergency_exit"):
+        tags.append("has_emergency_exit")
+    if "production" in room_type:
+        tags.append("production_zone")
+    if "hazmat" in room_type or "chemical" in room_type or "b3" in room_type:
+        tags.append("chemical_storage")
+    if "loading" in room_type or "dock" in room_type:
+        tags.append("loading_zone")
+    if "forklift" in room_type:
+        tags.append("forklift_zone")
+    if "utility" in room_type or "electrical" in room_type:
+        tags.append("utility_zone")
+    if "gowning" in room_type:
+        tags.append("ppe_required")
+    if "corridor" in room_type or "circulation" in room_type:
         tags.append("circulation")
-    if any(k in room_type for k in ("utility", "supply")):
-        tags.append("utility")
-    if any(k in room_type for k in ("entry", "lobby", "entrance")):
-        tags.append("entry")
-    if any(k in room_type for k in ("debrief", "consult", "conference", "skills")):
-        tags.append("consultation")
-    if any(k in room_type for k in ("control", "monitor")):
-        tags.append("control_room")
-
-    return tags
+    return list(set(tags))
 
 
 def build_spatial_bundle(
     scene_graph: dict,
     floor_plan_ref: str | None = None,
 ) -> dict:
-    """
-    Derive a canonical spatial bundle from a scene-graph JSON dict.
-
-    Returns a dict with keys:
-      unit_id, floor_plan_ref, rooms, room_index (internal), nav_edges,
-      visibility_pairs, zone_index, flow_annotations
-    """
     units = scene_graph.get("units", [])
-    unit_id: str = units[0]["unit_id"] if units else "unknown"
+    unit_id: str = units[0]["unit_id"] if units else "warehouse_main"
 
     all_rooms: list[dict] = []
     for unit in units:
@@ -126,12 +118,11 @@ def build_spatial_bundle(
 
     flow_annotations: dict = scene_graph.get("flow_annotations", {})
 
-    # --- Build room list ---
     bundle_rooms: list[dict] = []
     room_index: dict[str, dict] = {}
 
-    for room in all_rooms:
-        center = _grid_center(room)
+    for i, room in enumerate(all_rooms):
+        center = _grid_center(room, i)
         equipment_anchors: list[dict] = []
 
         for eq in room.get("equipment", []):
@@ -139,24 +130,25 @@ def build_spatial_bundle(
                 "type": eq.get("type"),
                 "accessible": eq.get("accessible", True),
                 "confidence": eq.get("confidence", 0.8),
-                "anchor": _eq_anchor(room, eq),
+                "anchor": _eq_anchor(center, eq),
                 "position_hint": eq.get("position", ""),
             })
 
         bundle_room = {
             "room_id": room["room_id"],
-            "type": room.get("type", "unknown"),
+            "type": room.get("type", "general_area"),
             "zone_tags": _zone_tags(room, flow_annotations),
             "center": center,
-            "area_sqft": room.get("area_sqft_estimate", 0),
+            "area_sqm": room.get("area_sqm_estimate", 80),
             "adjacency": room.get("adjacency", []),
-            "sightline_to_nursing_station": room.get("sightline_to_nursing_station", True),
+            "has_emergency_exit": room.get("has_emergency_exit", False),
+            "forklift_access": room.get("forklift_access", False),
+            "hazmat_present": room.get("hazmat_present", False),
             "equipment": equipment_anchors,
         }
         bundle_rooms.append(bundle_room)
         room_index[room["room_id"]] = bundle_room
 
-    # --- Nav edges from adjacency ---
     nav_edges: list[dict] = []
     seen_edges: set[frozenset] = set()
 
@@ -171,25 +163,15 @@ def build_spatial_bundle(
             dist_m = round(math.sqrt((c1["x"] - c2["x"]) ** 2 + (c1["z"] - c2["z"]) ** 2), 3)
             nav_edges.append({"from": room["room_id"], "to": neighbor_id, "distance_m": dist_m})
 
-    # --- Visibility pairs ---
-    visibility_pairs: list[dict] = []
-    nursing_rooms = [r["room_id"] for r in bundle_rooms if "nursing_hub" in r["zone_tags"]]
-
-    for room in bundle_rooms:
-        if room.get("sightline_to_nursing_station") and nursing_rooms:
-            for ns_id in nursing_rooms:
-                visibility_pairs.append({"observer": room["room_id"], "observed": ns_id})
-
-    # --- Zone index ---
     zone_index: dict[str, list[str]] = {r["room_id"]: r["zone_tags"] for r in bundle_rooms}
 
     return {
         "unit_id": unit_id,
+        "facility_type": scene_graph.get("facility_type", "pharmaceutical_manufacturing_warehouse"),
         "floor_plan_ref": floor_plan_ref,
         "rooms": bundle_rooms,
-        "room_index": room_index,  # fast lookup — stripped before LLM prompts
+        "room_index": room_index,
         "nav_edges": nav_edges,
-        "visibility_pairs": visibility_pairs,
         "zone_index": zone_index,
         "flow_annotations": flow_annotations,
     }

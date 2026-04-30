@@ -10,3 +10,6 @@ coverage
 .DS_Store
 frontend/.next
 frontend/node_modules
+HOW_TO_RUN.md
+PHOTO_CAPTURE_GUIDE.md
+SETUP.md

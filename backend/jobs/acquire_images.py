@@ -44,6 +44,53 @@ def _image_key(facility_id: str, source: str, file_name: str) -> str:
     return f"facilities/{facility_id}/images/{source}/{uuid4().hex[:8]}-{file_name}"
 
 
+def _load_supplemental_images(image_metas) -> list[dict]:
+    """Read supplemental upload bytes from local disk (R2 key → uploads/ path)."""
+    results = []
+    for meta in image_metas:
+        try:
+            local_path = pathlib.Path("uploads") / (meta.r2_key or "")
+            if not local_path.exists():
+                continue
+            data = local_path.read_bytes()
+            fname = local_path.name
+            results.append({
+                "bytes": data,
+                "source": "supplemental_upload",
+                "file_name": fname,
+                "content_type": meta.content_type or "image/jpeg",
+            })
+        except Exception:
+            continue
+    return results
+
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+_EXT_TO_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+def _scan_upload_dir(facility_id: str) -> list[dict]:
+    """Scan uploads/{facility_id}/ on disk — fallback when in-memory iris_client lost state."""
+    base = pathlib.Path("uploads") / "facilities" / facility_id
+    if not base.exists():
+        return []
+    results = []
+    for p in base.rglob("*"):
+        if p.suffix.lower() not in _IMAGE_EXTS or not p.is_file():
+            continue
+        try:
+            data = p.read_bytes()
+            results.append({
+                "bytes": data,
+                "source": "supplemental_upload",
+                "file_name": p.name,
+                "content_type": _EXT_TO_MIME.get(p.suffix.lower(), "image/jpeg"),
+            })
+        except Exception:
+            continue
+    return results
+
+
 async def acquire_images_for_facility(facility_id: str, address: str, *, model_id: str | None = None) -> dict:
     settings = get_settings()
     facility = iris_client.facilities[facility_id]
@@ -57,8 +104,16 @@ async def acquire_images_for_facility(facility_id: str, address: str, *, model_i
             fetch_osm_building(facility.lat, facility.lng),
         )
         all_images = street_view + places_photos
+
+        # Fall back to supplemental uploads when Google Maps returns nothing
         if not all_images:
-            raise RuntimeError("No public imagery was returned for this facility")
+            supplemental = iris_client.list_images_for_facility(facility_id)
+            all_images = _load_supplemental_images(supplemental)
+            # Second fallback: scan disk directly (in-memory client may have lost state)
+            if not all_images:
+                all_images = _scan_upload_dir(facility_id)
+            if not all_images:
+                raise RuntimeError("No public imagery was returned for this facility")
 
         uploaded_images: list[dict] = []
         for index, image in enumerate(all_images, start=1):

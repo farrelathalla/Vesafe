@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # Azure OpenAI (primary CSE synthesis engine)
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
-    azure_openai_deployment: str = "gpt-4o-mini"
+    azure_openai_deployment: str = ""
 
     # Azure Blob Storage (3D asset storage — replaces Cloudflare R2)
     azure_storage_account: str = ""

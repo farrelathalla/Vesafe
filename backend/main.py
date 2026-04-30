@@ -29,6 +29,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Location", "Upload-Offset", "Upload-Length", "Tus-Resumable", "Tus-Version", "Tus-Extension"],
 )
 
 app.include_router(facilities_router)
@@ -45,7 +46,7 @@ app.include_router(websocket_router)
 
 @app.on_event("startup")
 async def _auto_scan_on_startup() -> None:
-    """Run an initial safety scan for every ready model so findings are populated immediately."""
+    """Schedule a background safety scan for every ready model without blocking server startup."""
     from backend.agents.orchestrator import run_scan
     from backend.db.iris_client import iris_client
 
@@ -56,13 +57,9 @@ async def _auto_scan_on_startup() -> None:
         except Exception as exc:
             logger.warning("Startup scan failed for %s: %s", unit_id, exc)
 
-    tasks = [
-        _scan(m.unit_id, m.model_id)
-        for m in iris_client.models.values()
-        if m.status == "ready"
-    ]
-    if tasks:
-        await asyncio.gather(*tasks)
+    for m in iris_client.models.values():
+        if m.status == "ready":
+            asyncio.create_task(_scan(m.unit_id, m.model_id))
 
 
 @app.get("/health")
@@ -71,6 +68,18 @@ async def health():
 
 
 _FAL_DIR = pathlib.Path("data/fal_images")
+_UPLOAD_DIR = pathlib.Path("uploads")
+
+
+@app.get("/api/uploads/{key:path}")
+async def serve_local_upload(key: str):
+    """Serve locally-stored uploaded images when R2 is not configured."""
+    path = _UPLOAD_DIR / key
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Upload not found")
+    suffix = path.suffix.lower()
+    media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(suffix.lstrip("."), "application/octet-stream")
+    return FileResponse(path, media_type=media, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/fal-images/{filename:path}")

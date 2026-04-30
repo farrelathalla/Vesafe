@@ -26,16 +26,16 @@
 
 ## 1. Product Overview
 
-VeSafe constructs a navigable 3D world model of any pharmaceutical manufacturing facility from **publicly available imagery** (Google Street View, Google Places Photos, OpenStreetMap) — no manual bulk photo upload required — then deploys six specialized AI agent teams into that model to identify, annotate, and rank critical occupational safety (K3) weaknesses.
+VeSafe constructs a navigable 3D world model of any pharmaceutical manufacturing facility from **manually uploaded interior photos** — then deploys six specialized AI agent teams into that model to identify, annotate, and rank critical occupational safety (K3) weaknesses.
 
 All data is secured through **InterSystems IRIS for Health**, which provides enterprise-grade encryption (Secure Wallet), FHIR R4 interoperability, role-based access control, and full audit logging as a native healthcare-grade data platform.
 
-VeSafe is built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program), combining Azure OpenAI Service for consensus synthesis, Azure Blob Storage for 3D asset storage, Azure Web PubSub for real-time streaming, and Azure Maps for facility location — alongside World Labs Gaussian-splat world model libraries and InterSystems IRIS as the data security backbone.
+VeSafe is built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi program), combining Azure OpenAI Service for consensus synthesis, Azure Blob Storage for 3D asset storage, and Azure Web PubSub for real-time streaming — alongside World Labs Gaussian-splat world model libraries and InterSystems IRIS as the data security backbone.
 
 ### Core Value Proposition
 
-- Any K3 officer selects their facility on a map → the system automatically acquires imagery → generates a 3D world model → deploys agents → delivers annotated findings in under 30 minutes
-- No manual photography. No bulk upload. No IT integration required for basic function.
+- Any K3 officer registers their facility and uploads ~16 interior photos → the system generates a 3D world model → deploys agents → delivers annotated findings in under 30 minutes
+- No external imagery APIs. No map integration required.
 - Findings are spatially anchored in the 3D model with plain-language labels a safety officer can act on immediately
 - Full Azure ecosystem integration: Azure OpenAI, Azure Blob Storage, Azure Maps, Azure Web PubSub, Azure App Service, Azure Application Insights
 
@@ -45,7 +45,6 @@ VeSafe is built for the **Microsoft AI Impact Challenge** (Dicoding × Komdigi p
 |---|---|
 | **Azure OpenAI Service** | Consensus Synthesis Engine (CSE) — cross-domain finding deduplication and ranking |
 | **Azure Blob Storage** | 3D world model `.spz` asset storage (replaces Cloudflare R2) |
-| **Azure Maps** | Facility selection map and geocoding (replaces Mapbox) |
 | **Azure Web PubSub** | Real-time WebSocket finding stream to browser |
 | **Azure App Service** | FastAPI backend hosting (F1 Free Tier) |
 | **Azure Static Web Apps** | Next.js frontend hosting with CI/CD |
@@ -76,15 +75,15 @@ Each of the six domains maps to a documented, high-impact, spatially-detectable 
 │  (Secure Wallet · FHIR R4 · RBAC · Audit Log · IntegratedML)   │
 ├──────────────┬──────────────────────────┬───────────────────────┤
 │  Layer 1     │  Layer 2                 │  Layer 3              │
-│  Image       │  World Model Pipeline    │  Agent Orchestration  │
-│  Acquisition │  Claude Vision →         │  6 K3 Domain Teams    │
-│  ────────    │  Scene Graph →           │  Modal (A10G)         │
-│  Street View │  World Labs API →        │  Azure Web PubSub     │
-│  Places API  │  .splat binary           │  CSE (Azure OpenAI)   │
-│  OSM         │  → Azure Blob Storage    │                       │
+│  Manual      │  World Model Pipeline    │  Agent Orchestration  │
+│  Photo       │  Claude Vision →         │  6 K3 Domain Teams    │
+│  Upload      │  Scene Graph →           │  Modal (A10G)         │
+│  ────────    │  World Labs API →        │  Azure Web PubSub     │
+│  ~16 photos  │  .splat binary           │  CSE (Azure OpenAI)   │
+│  drag & drop │  → Azure Blob Storage    │                       │
 ├──────────────┴──────────────────────────┴───────────────────────┤
 │  Layer 4: Frontend                                              │
-│  Next.js · Azure Maps · React Three Fiber · Azure Web PubSub   │
+│  Next.js · React Three Fiber · Azure Web PubSub                │
 │  Azure Static Web Apps · Azure Application Insights            │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -96,8 +95,6 @@ Each of the six domains maps to a documented, high-impact, spatially-detectable 
 **Why Azure OpenAI over OpenAI Direct:** Azure OpenAI provides the same GPT-4o capability through Microsoft's regulated cloud infrastructure, with data residency in Indonesia/Southeast Asia region, enterprise SLA, and seamless integration scoring for the Microsoft AI Impact Challenge.
 
 **Why Azure Blob Storage over Cloudflare R2:** Native Azure ecosystem integration, 12-month free tier (5GB LRS + 2M read/write operations), and unified billing with other Azure services used in this project.
-
-**Why Azure Maps over Mapbox:** Microsoft Azure service with Free Tier adequate for prototype and demo, native integration scoring, and support for Indonesian geographic data.
 
 **Why Azure Web PubSub over Redis Pub/Sub:** 20 concurrent connections + 20,000 messages/day on free tier, no self-managed infrastructure, and native Azure integration — ideal for demo and prototype phases.
 
@@ -175,28 +172,11 @@ class IRISClient:
 
 ## 5. World Model Pipeline
 
-### 5.1 Image Acquisition (Public Imagery First)
+### 5.1 Image Input — Manual Upload
 
-No manual bulk upload. The pipeline automatically acquires imagery for any facility address.
+A safety officer uploads ~16 interior facility photos through the drag-and-drop interface. Photos should follow the capture guide in `PHOTO_CAPTURE_GUIDE.md` to ensure sufficient overlap for Gaussian Splatting reconstruction. Accepted formats: JPG, PNG, WebP.
 
-#### 5.1.1 Google Street View API
-
-```python
-async def fetch_street_view(lat: float, lng: float, api_key: str) -> list[bytes]:
-    """Fetch 8-heading panoramic exterior coverage for a location."""
-    images = []
-    async with httpx.AsyncClient() as client:
-        for heading in [0, 45, 90, 135, 180, 225, 270, 315]:
-            resp = await client.get("https://maps.googleapis.com/maps/api/streetview", params={
-                "location": f"{lat},{lng}", "heading": heading,
-                "fov": 90, "pitch": 0, "size": "640x640", "key": api_key,
-            })
-            if resp.status_code == 200:
-                images.append(resp.content)
-    return images
-```
-
-#### 5.1.2 Azure Blob Storage (3D Asset Storage)
+#### 5.1.1 Azure Blob Storage (3D Asset Storage)
 
 ```python
 # backend/db/azure_blob_client.py
@@ -258,23 +238,7 @@ Respond with JSON only:
     return json.loads(response.content[0].text)
 ```
 
-### 5.3 Azure Maps Integration (Facility Selection)
-
-```typescript
-// frontend/components/facility/FacilityMap.tsx
-import atlas from 'azure-maps-control';
-
-const map = new atlas.Map('map-container', {
-    authOptions: {
-        authType: 'subscriptionKey',
-        subscriptionKey: process.env.NEXT_PUBLIC_AZURE_MAPS_KEY,
-    },
-    center: [106.8456, -6.2088],  // Jakarta, Indonesia
-    zoom: 10,
-});
-```
-
-### 5.4 Azure Web PubSub (Real-time Findings Stream)
+### 5.3 Azure Web PubSub (Real-time Findings Stream)
 
 ```python
 # backend/db/redis_client.py — Azure Web PubSub adapter
@@ -479,7 +443,6 @@ class AzureOpenAIProvider:
 | Framework | Next.js | 15 (App Router) |
 | 3D Renderer | React Three Fiber + Drei | r3f v8, Drei v9 |
 | Splat Engine | `@mkkellogg/gaussian-splats-3d` | 0.4.7 |
-| Maps | azure-maps-control | v3 |
 | State | Zustand | v5 |
 | Styling | Tailwind CSS | v4 |
 | Supplemental Upload | tus-js-client + React Dropzone | latest |
@@ -601,9 +564,6 @@ IRIS_USER=medsent_app
 IRIS_PASSWORD=<set in secrets manager>
 IRIS_FHIR_BASE=http://localhost:52773/fhir/r4
 
-# Google APIs (image acquisition)
-GOOGLE_API_KEY=<Maps Platform key with Street View + Places enabled>
-
 # World Labs (3D model generation)
 WORLD_LABS_API_KEY=<world labs api key>
 
@@ -619,9 +579,6 @@ AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
 AZURE_STORAGE_ACCOUNT=<storage account name>
 AZURE_STORAGE_KEY=<storage account key>
 AZURE_STORAGE_CONTAINER=vesafe-assets
-
-# Azure Maps (facility map — replaces Mapbox)
-NEXT_PUBLIC_AZURE_MAPS_KEY=<azure maps subscription key>
 
 # Azure Web PubSub (real-time stream — replaces Redis)
 AZURE_WEB_PUBSUB_CONNECTION_STRING=Endpoint=https://<name>.webpubsub.azure.com;...
@@ -718,12 +675,11 @@ vesafe/
 
 - Scaffold Next.js + FastAPI with Azure Static Web Apps + Azure App Service deployment
 - Set up IRIS for Health container. Initialize globals schema, Secure Wallet, RBAC
-- Set up Azure Blob Storage, Azure Web PubSub, Azure Maps
-- Implement Google Street View + Places API image acquisition pipeline
+- Set up Azure Blob Storage, Azure Web PubSub
+- Implement manual photo upload pipeline (drag & drop, up to 20 photos per session)
 - Implement Claude Vision image classification (pharma facility categories)
 - Integrate World Labs API for 3D Gaussian-splat generation
 - Build React Three Fiber + SparkJS splat viewer
-- Build Azure Maps facility selector
 
 ### Phase 2 — K3 Agent Teams
 
@@ -747,7 +703,7 @@ vesafe/
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Public imagery insufficient for industrial interior spaces | HIGH | Google Street View + Places covers building exteriors and common areas. Coverage map guides upload of targeted gap-fill images. |
+| Uploaded photos insufficient for full interior coverage | MEDIUM | Follow `PHOTO_CAPTURE_GUIDE.md` (16-photo protocol with 60% overlap). Additional supplemental uploads supported at any time. |
 | Agent findings contain hallucinations | HIGH | Multi-agent consensus reduces error. Evidence image shown per finding. K3 officer review recommended before acting on CRITICAL findings. |
 | Azure OpenAI availability | MEDIUM | `openai_provider.py` kept as fallback. `MEDSENTINEL_USE_SYNTHETIC_FALLBACKS=true` for demo. |
 | Indonesian standard accuracy | MEDIUM | All agent prompts cite specific Indonesian regulations (Permenaker, CPOB, SMK3, PP). Updated as regulations change. |

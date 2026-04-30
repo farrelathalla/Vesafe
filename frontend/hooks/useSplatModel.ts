@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
-import { getFallbackSplatUrl, resolveSplatAssetUrl } from "@/lib/splat";
+import { resolveSplatAssetUrl } from "@/lib/splat";
 import type { ModelStatusResponse } from "@/types";
 
 export function useSplatModel(unitId: string) {
@@ -25,12 +25,20 @@ export function useSplatModel(unitId: string) {
         }
 
         if (currentStatus.status === "ready" && !signedUrlRef.current) {
-          const result = await api.getSplat(unitId);
-          if (!cancelled) {
-            const url = resolveSplatAssetUrl(result);
-            signedUrlRef.current = url;
-            setSignedUrl(url);
-            setError(null);
+          try {
+            const result = await api.getSplat(unitId);
+            if (!cancelled) {
+              const url = resolveSplatAssetUrl(result);
+              signedUrlRef.current = url;
+              setSignedUrl(url);
+              setError(null);
+            }
+          } catch {
+            // Splat not available (no R2/WorldLabs) — show placeholder, don't error
+            if (!cancelled) {
+              signedUrlRef.current = "";
+              setSignedUrl("");
+            }
           }
         } else if (!cancelled) {
           if (currentStatus.status !== "ready") {
@@ -46,9 +54,7 @@ export function useSplatModel(unitId: string) {
         }
       } catch (loadError) {
         if (!cancelled) {
-          signedUrlRef.current = "";
           setError(loadError instanceof Error ? loadError.message : "Unable to load model state");
-          setSignedUrl(getFallbackSplatUrl(unitId));
         }
       } finally {
         if (!cancelled) {
